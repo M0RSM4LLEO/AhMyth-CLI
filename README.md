@@ -1,0 +1,2 @@
+# AhMyth-CLI
+NOT READY YET — DONT USE
