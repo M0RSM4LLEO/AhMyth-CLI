@@ -1,148 +1,188 @@
 package main
 
 import (
-	"bufio"
 	"fmt"
 	"os"
+	"os/exec"
+	"regexp"
+	"strconv"
 	"strings"
 	"time"
+
+	"ahmyth-cli/cli"
 )
 
 const (
 	reset = "\033[0m"
-	cyan  = "\033[36m"
+	red   = "\033[31m"
+	green = "\033[32m"
 	blue  = "\033[34m"
 	bold  = "\033[1m"
-	clear = "\033[2J"
-	home  = "\033[H"
-	hide  = "\033[?25l"
-	show  = "\033[?25h"
 )
 
-func getWidth() int {
-	// Default fallback if terminal size can't be detected
-	return 80
+func stripAnsi(s string) string {
+	re := regexp.MustCompile(`\x1b\[[0-9;]*m`)
+	return re.ReplaceAllString(s, "")
 }
 
-// simple centering helper
-func center(text string, width int) string {
-	if len(text) >= width {
-		return text
-	}
-	padding := (width - len(text)) / 2
-	return strings.Repeat(" ", padding) + text
+func printHeader(text string) {
+    visibleLen := len(stripAnsi(text))
+    line := strings.Repeat("─", visibleLen)
+
+    fmt.Println(text)
+    fmt.Println(line)
 }
 
-func clearScreen() {
-	fmt.Print(clear, home)
+func uiDelay(ms int) {
+	time.Sleep(time.Duration(ms) * time.Millisecond)
 }
 
-func waitForEnter(reader *bufio.Reader) {
-	fmt.Print("\nPress Enter to return to the menu...")
-	_, _ = reader.ReadString('\n')
-}
-
-func ShowSplash() {
-	width := getWidth()
-
-	fmt.Print(hide)
-	defer fmt.Print(show)
-
-	frames := []string{"│", "┃", "█", "┃", "│"}
-
-	for i := 0; i < 3; i++ {
-		for _, f := range frames {
-			fmt.Print(clear, home)
-
-			line := center(fmt.Sprintf("%s%s%s", cyan, f, reset), width)
-			fmt.Println("\n\n\n" + line)
-
-			time.Sleep(80 * time.Millisecond)
-		}
-	}
-
-	fmt.Print(clear, home)
-
-	title := center(fmt.Sprintf("%s%sAhMyth%s", bold, blue, reset), width)
-	sub := center("Android Remote Administration Tool", width)
-
-	fmt.Println("\n\n\n" + title)
-	fmt.Println(sub)
-
-	time.Sleep(1500 * time.Millisecond)
-	fmt.Print(clear, home)
-}
-
-func drawMenu() {
-	width := getWidth()
-
-	logo := []string{
-		"    _    _     __  __       _   _     ",
-		"   / \\  | |__ |  \\/  |_   _| |_| |__  ",
-		"  / _ \\ | '_ \\| |\\/| | | | | __| '_ \\ ",
-		" / ___ \\| | | | |  | | |_| | |_| | | |",
-		"/_/   \\_\\_| |_|_|  |_|\\__, |\\__|_| |_|",
-		"                       |___/           ",
-		"======================================",
-	}
-
-	clearScreen()
-
-	fmt.Print(hide)
-	defer fmt.Print(show)
-
-	for _, line := range logo {
-		fmt.Println(center(fmt.Sprintf("%s%s%s", bold, blue, line), width))
-	}
-
-	fmt.Println()
-
-	menuTitle := "Main Menu"
-
-	// Blue + bold title, then reset immediately
-	fmt.Println(fmt.Sprintf("%s%s%s%s", bold, blue, menuTitle, reset))
-
-	// Blue underline (explicit color reset after it)
-	fmt.Println(fmt.Sprintf("%s%s%s", blue, strings.Repeat("—", len(menuTitle)), reset))
-
-	fmt.Println()
-
-	fmt.Println("1) Listener (TO BE DONE)")
-	fmt.Println("2) Payload Options (TO BE DONE)")
-	fmt.Println("0) Exit")
-	fmt.Println()
-}
-
-func menuLoop() {
-	reader := bufio.NewReader(os.Stdin)
-
-	for {
-		drawMenu()
-
-		fmt.Print("\nSelect an option: ")
-		input, _ := reader.ReadString('\n')
-		input = strings.TrimSpace(input)
-
-		switch input {
-		case "1":
-			clearScreen()
-			fmt.Println("Build selected.")
-			// Placeholder for your build logic
-			waitForEnter(reader)
-
-		case "0":
-			clearScreen()
-			return
-
-		default:
-			fmt.Println("Invalid option.")
-			time.Sleep(1 * time.Second)
-		}
-	}
+func clearTerminal() {
+	fmt.Print("\033[2J\033[H")
 }
 
 func main() {
-	ShowSplash()
-	menuLoop()
+	// clear termanl and delay visuals 
+	// for a nice clean look
+	clearTerminal()
+	fmt.Println()
+	uiDelay(1000)
+
+	//print the "Preflight Checks" string
+	printHeader(fmt.Sprintf("%s%sPreflight Checks%s", bold, blue, reset))
+
+	// add a 1 secone delay for neat visuals
+	uiDelay(1000)
+
+	allOK := true
+
+	ok, detail := checkJava()
+	allOK = printCheck("Java (OpenJDK 11+)", ok, detail) && allOK
+
+	// needs a better seperator logic
+	fmt.Println(strings.Repeat("─", 52))
+
+	// add a 1 secone delay for neat vi>
+        uiDelay(1000)
+
+	ok, detail = checkApktool()
+	allOK = printCheck("apktool", ok, detail) && allOK
+
+	// needs better seperator logic
+	fmt.Println(strings.Repeat("─", 52))
+
+	// add a 1 secone delay for neat vi>
+        uiDelay(1000)
+
+	if !allOK {
+		fmt.Println(fmt.Sprintf("%sOne or more prerequisites failed.%s", red, reset))
+
+		// add a 1 secone delay for neat vi>
+	        uiDelay(1000)
+
+		os.Exit(1)
+	}
+
+	fmt.Println(fmt.Sprintf("%sSystem ready. Starting...%s", green, reset))
+	time.Sleep(1200 * time.Millisecond)
+	uiDelay(1000)
+
+	cli.Run()
 }
 
+func printCheck(label string, ok bool, detail string) bool {
+	symbol := fmt.Sprintf("%s✖%s", red, reset)
+	status := red
+	if ok {
+		symbol = fmt.Sprintf("%s✔%s", green, reset)
+		status = green
+	}
+
+	fmt.Printf("%s %-24s %s%s%s\n", symbol, label, status, detail, reset)
+	return ok
+}
+
+func checkJava() (bool, string) {
+	javaPath, err := exec.LookPath("java")
+	if err != nil {
+		return false, "not found in PATH"
+	}
+
+	cmd := exec.Command(javaPath, "-version")
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return false, "found, but failed to run"
+	}
+
+	version, ok := parseJavaMajorVersion(string(output))
+	if !ok {
+		return false, "found, but version could not be determined"
+	}
+
+	if version < 11 {
+		return false, fmt.Sprintf("version %d detected at %s (need 11+)", version, javaPath)
+	}
+
+	return true, fmt.Sprintf("version %d detected at %s", version, javaPath)
+}
+
+func checkApktool() (bool, string) {
+	apktoolPath, err := exec.LookPath("apktool")
+	if err != nil {
+		return false, "not found in PATH"
+	}
+
+	cmd := exec.Command(apktoolPath, "-version")
+	output, err := cmd.CombinedOutput()
+	out := strings.TrimSpace(string(output))
+	if err == nil && out != "" {
+		return true, fmt.Sprintf("version %s detected at %s", out, apktoolPath)
+	}
+
+	shellCmd := exec.Command("sh", "-c", shellQuote(apktoolPath)+" -version")
+	output, err = shellCmd.CombinedOutput()
+	out = strings.TrimSpace(string(output))
+	if err != nil && out == "" {
+		return false, fmt.Sprintf("found at %s, but failed to execute", apktoolPath)
+	}
+
+	if out == "" {
+		return true, fmt.Sprintf("installed at %s", apktoolPath)
+	}
+
+	return true, fmt.Sprintf("version %s detected at %s", out, apktoolPath)
+}
+
+func parseJavaMajorVersion(output string) (int, bool) {
+	re := regexp.MustCompile(`version\s+"([^"]+)"`)
+	match := re.FindStringSubmatch(output)
+	if len(match) < 2 {
+		return 0, false
+	}
+
+	raw := match[1]
+
+	if strings.HasPrefix(raw, "1.") {
+		parts := strings.Split(raw, ".")
+		if len(parts) < 2 {
+			return 0, false
+		}
+		n, err := strconv.Atoi(parts[1])
+		if err != nil {
+			return 0, false
+		}
+		return n, true
+	}
+
+	parts := strings.Split(raw, ".")
+	n, err := strconv.Atoi(parts[0])
+	if err != nil {
+		return 0, false
+	}
+
+	return n, true
+}
+
+func shellQuote(s string) string {
+	return "'" + strings.ReplaceAll(s, "'", `'"'"'`) + "'"
+}
