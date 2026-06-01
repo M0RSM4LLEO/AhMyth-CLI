@@ -7,98 +7,56 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
-	"time"
 
 	"ahmyth-cli/cli"
 )
 
-const (
-	reset = "\033[0m"
-	red   = "\033[31m"
-	green = "\033[32m"
-	blue  = "\033[34m"
-	bold  = "\033[1m"
-)
-
-func stripAnsi(s string) string {
-	re := regexp.MustCompile(`\x1b\[[0-9;]*m`)
-	return re.ReplaceAllString(s, "")
-}
-
-func printHeader(text string) {
-    visibleLen := len(stripAnsi(text))
-    line := strings.Repeat("─", visibleLen)
-
-    fmt.Println(text)
-    fmt.Println(line)
-}
-
-func uiDelay(ms int) {
-	time.Sleep(time.Duration(ms) * time.Millisecond)
-}
-
-func clearTerminal() {
-	fmt.Print("\033[2J\033[H")
-}
-
 func main() {
-	// clear termanl and delay visuals 
-	// for a nice clean look
-	clearTerminal()
+	cli.ClearScreen()
 	fmt.Println()
-	uiDelay(1000)
+	cli.Delay(1000)
 
-	//print the "Preflight Checks" string
-	printHeader(fmt.Sprintf("%s%sPreflight Checks%s", bold, blue, reset))
-
-	// add a 1 secone delay for neat visuals
-	uiDelay(1000)
+	cli.PrintHeader(fmt.Sprintf("%s%sPreflight Checks%s", cli.Bold, cli.Blue, cli.Reset))  
+	cli.Delay(1000)
 
 	allOK := true
 
 	ok, detail := checkJava()
-	allOK = printCheck("Java (OpenJDK 11+)", ok, detail) && allOK
+	allOK = printCheck("Java (OpenJDK 11+)", ok, detail) && allOK  
 
-	// needs a better seperator logic
-	fmt.Println(strings.Repeat("─", 52))
-
-	// add a 1 secone delay for neat vi>
-        uiDelay(1000)
+	fmt.Println(strings.Repeat("─", 52))  
+	cli.Delay(1000)
 
 	ok, detail = checkApktool()
-	allOK = printCheck("apktool", ok, detail) && allOK
+	allOK = printCheck("apktool", ok, detail) && allOK  
 
-	// needs better seperator logic
-	fmt.Println(strings.Repeat("─", 52))
-
-	// add a 1 secone delay for neat vi>
-        uiDelay(1000)
+	fmt.Println(strings.Repeat("─", 52))  
+        cli.Delay(1000)
 
 	if !allOK {
-		fmt.Println(fmt.Sprintf("%sOne or more prerequisites failed.%s", red, reset))
-
-		// add a 1 secone delay for neat vi>
-	        uiDelay(1000)
-
+		fmt.Printf("%sOne or more prerequisites failed.%s\n", cli.Red, cli.Reset)  
+		fmt.Println("Please install missing dependencies before continuing.")  
+		fmt.Println(strings.Repeat("─", 52))  
+	        cli.Delay(1000)
 		os.Exit(1)
 	}
 
-	fmt.Println(fmt.Sprintf("%sSystem ready. Starting...%s", green, reset))
-	time.Sleep(1200 * time.Millisecond)
-	uiDelay(1000)
+	fmt.Printf("%sSystem ready. Starting...%s\n", cli.Green, cli.Reset)  
+	cli.Delay(1200)
 
 	cli.Run()
 }
 
-func printCheck(label string, ok bool, detail string) bool {
-	symbol := fmt.Sprintf("%s✖%s", red, reset)
-	status := red
+// Helper functions
+func printCheck(label string, ok bool, detail string) bool {  
+	symbol := fmt.Sprintf("%s✖%s", cli.Red, cli.Reset)  
+	status := cli.Red
 	if ok {
-		symbol = fmt.Sprintf("%s✔%s", green, reset)
-		status = green
+		symbol = fmt.Sprintf("%s✔%s", cli.Green, cli.Reset)  
+		status = cli.Green
 	}
 
-	fmt.Printf("%s %-24s %s%s%s\n", symbol, label, status, detail, reset)
+	fmt.Printf("%s %-24s %s%s%s\n", symbol, label, status, detail, cli.Reset)  
 	return ok
 }
 
@@ -111,19 +69,19 @@ func checkJava() (bool, string) {
 	cmd := exec.Command(javaPath, "-version")
 	output, err := cmd.CombinedOutput()
 	if err != nil {
-		return false, "found, but failed to run"
+		return false, "found at " + javaPath + ", but failed to run"
 	}
 
-	version, ok := parseJavaMajorVersion(string(output))
+	version, ok := parseJavaVersion(string(output))
 	if !ok {
-		return false, "found, but version could not be determined"
+		return true, "detected at " + javaPath + " (version could not be parsed)"
 	}
 
 	if version < 11 {
-		return false, fmt.Sprintf("version %d detected at %s (need 11+)", version, javaPath)
+		return false, "version " + strconv.Itoa(version) + " detected at " + javaPath + " (need 11+)"
 	}
 
-	return true, fmt.Sprintf("version %d detected at %s", version, javaPath)
+	return true, "version " + strconv.Itoa(version) + " detected at " + javaPath
 }
 
 func checkApktool() (bool, string) {
@@ -132,28 +90,29 @@ func checkApktool() (bool, string) {
 		return false, "not found in PATH"
 	}
 
-	cmd := exec.Command(apktoolPath, "-version")
-	output, err := cmd.CombinedOutput()
-	out := strings.TrimSpace(string(output))
-	if err == nil && out != "" {
-		return true, fmt.Sprintf("version %s detected at %s", out, apktoolPath)
+	// Run through shell like the terminal does
+	cmd := exec.Command("sh", "-c", "apktool -version")
+	output, _ := cmd.CombinedOutput()
+
+	version := strings.TrimSpace(string(output))
+
+	// Fallback: some versions use --version
+	if version == "" {
+		cmd = exec.Command("sh", "-c", "apktool --version")
+		output, _ = cmd.CombinedOutput()
+		version = strings.TrimSpace(string(output))
 	}
 
-	shellCmd := exec.Command("sh", "-c", shellQuote(apktoolPath)+" -version")
-	output, err = shellCmd.CombinedOutput()
-	out = strings.TrimSpace(string(output))
-	if err != nil && out == "" {
-		return false, fmt.Sprintf("found at %s, but failed to execute", apktoolPath)
+	// If we got any output at all, treat it as success
+	if version != "" {
+		return true, "version " + version + " detected at " + apktoolPath
 	}
 
-	if out == "" {
-		return true, fmt.Sprintf("installed at %s", apktoolPath)
-	}
-
-	return true, fmt.Sprintf("version %s detected at %s", out, apktoolPath)
+	// Last fallback: executable exists, but version failed
+	return true, "detected at " + apktoolPath + " (version unavailable)"
 }
 
-func parseJavaMajorVersion(output string) (int, bool) {
+func parseJavaVersion(output string) (int, bool) {
 	re := regexp.MustCompile(`version\s+"([^"]+)"`)
 	match := re.FindStringSubmatch(output)
 	if len(match) < 2 {
@@ -162,6 +121,7 @@ func parseJavaMajorVersion(output string) (int, bool) {
 
 	raw := match[1]
 
+	// Old Java format: 1.8.0_xxx
 	if strings.HasPrefix(raw, "1.") {
 		parts := strings.Split(raw, ".")
 		if len(parts) < 2 {
@@ -174,15 +134,11 @@ func parseJavaMajorVersion(output string) (int, bool) {
 		return n, true
 	}
 
+	// New Java format: 11, 17.0.2, 21.0.1, etc.
 	parts := strings.Split(raw, ".")
 	n, err := strconv.Atoi(parts[0])
 	if err != nil {
 		return 0, false
 	}
-
 	return n, true
-}
-
-func shellQuote(s string) string {
-	return "'" + strings.ReplaceAll(s, "'", `'"'"'`) + "'"
 }
