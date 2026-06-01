@@ -1,4 +1,4 @@
-# <div align="center">AhMyth-CLI</div>
+# <div align="center">🪶 AhMyth-CLI 🪶</div>
 A Command line interface version of the AhMyth Android RAT Project.
 
 &nbsp;
@@ -7,13 +7,38 @@ NOT READY YET — DONT USE
 
 &nbsp;
 ## <div align="center">Usage</div>
-1. `git clone https://github.com/M0RSM4LLEO/AhMyth-CLI`
-2. `cd AhMyth-CLI`
-3. `./ahmyth-cli`
-
+1. Clone it:
+```
+   git clone https://github.com/M0RSM4LLEO/AhMyth-CLI
+```
 &nbsp;
+
+2. Open it:
+```
+cd AhMyth-CLI
+```
+&nbsp;
+
+3. Run it:
+```
+./ahmyth-cli
+```
+&nbsp;
+
 ## <div align="center">Build</div>
-1. `git clone https://github.com/M0RSM4LLEO/AhMyth-CLI`
-2. `cd AhMyth-CLI`
-3. `rm -f ahmyth-cli`
-4. `go build -o ahmyth-cli`
+1. Clone it:
+```
+git clone https://github.com/M0RSM4LLEO/AhMyth-CLI
+```
+&nbsp;
+
+2. Open it:
+```
+cd AhMyth-CLI
+```
+&nbsp;
+
+3. Build it:
+```
+go build -o ahmyth-cli
+```
