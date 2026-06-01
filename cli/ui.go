@@ -3,6 +3,8 @@ package cli
 import (
 	"fmt"
 	"strings"
+	"os"
+	"golang.org/x/term"
 )
 
 const (
@@ -17,7 +19,16 @@ const (
 )
 
 func getWidth() int {
-	return 80
+	width, _, err := term.GetSize(int(os.Stdout.Fd()))
+	if err != nil {
+		return 80
+	}
+
+	if width < 40 {
+		return 40
+	}
+
+	return width
 }
 
 func center(text string, width int) string {
