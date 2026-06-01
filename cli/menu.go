@@ -49,7 +49,6 @@ func menuLoop() {
 		switch input {  
 		case "0":  
 			ClearScreen()  
-			fmt.Println("Goodbye!")  
 			return  
 		case "1", "2":  
 			fmt.Println("This feature is not implemented yet.")  
