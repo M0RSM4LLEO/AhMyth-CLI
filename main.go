@@ -24,13 +24,15 @@ func main() {
 	ok, detail := checkJava()
 	allOK = printCheck("Java (OpenJDK 11+)", ok, detail) && allOK  
 
-	fmt.Println(strings.Repeat("─", 52))  
+	cli.PrintSeparator()
+	//fmt.Println(strings.Repeat("─", 52))  
 	cli.Delay(1000)
 
 	ok, detail = checkApktool()
 	allOK = printCheck("apktool", ok, detail) && allOK  
 
-	fmt.Println(strings.Repeat("─", 52))  
+	cli.PrintSeparator()
+	//fmt.Println(strings.Repeat("─", 52))  
         cli.Delay(1000)
 
 	if !allOK {
