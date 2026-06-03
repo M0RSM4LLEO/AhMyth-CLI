@@ -4,7 +4,9 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"regexp"
+	"runtime"
 	"strconv"
 	"strings"
 
@@ -16,49 +18,54 @@ func main() {
 	fmt.Println()
 	cli.Delay(1000)
 
-	cli.PrintHeader(fmt.Sprintf("%s%sPreflight Checks%s", cli.Bold, cli.Blue, cli.Reset))  
+	cli.PrintHeader(fmt.Sprintf("%s%sPreflight Checks%s", cli.Bold, cli.Blue, cli.Reset))
 	cli.Delay(1000)
 
 	allOK := true
 
 	ok, detail := checkJava()
-	allOK = printCheck("Java (OpenJDK 11+)", ok, detail) && allOK  
+	allOK = printCheck("Java (OpenJDK 11+)", ok, detail) && allOK
 
 	cli.PrintSeparator()
-	//fmt.Println(strings.Repeat("─", 52))  
+	cli.Delay(1000)
+
+	ok, detail = checkGo()
+	allOK = printCheck("Go", ok, detail) && allOK
+
+	cli.PrintSeparator()
 	cli.Delay(1000)
 
 	ok, detail = checkApktool()
-	allOK = printCheck("apktool", ok, detail) && allOK  
+	allOK = printCheck("apktool", ok, detail) && allOK
 
 	cli.PrintSeparator()
-	//fmt.Println(strings.Repeat("─", 52))  
-        cli.Delay(1000)
+	cli.Delay(1000)
 
 	if !allOK {
-		fmt.Printf("%sOne or more prerequisites failed.%s\n", cli.Red, cli.Reset)  
-		fmt.Println("Please install missing dependencies before continuing.")  
-		fmt.Println(strings.Repeat("─", 52))  
-	        cli.Delay(1000)
+		fmt.Printf("%sOne or more prerequisites failed.%s\n", cli.Red, cli.Reset)
+		fmt.Println("Please install missing dependencies before continuing.")
+		cli.PrintSeparator()
+		cli.Delay(1000)
 		os.Exit(1)
 	}
 
-	fmt.Printf("%sSystem ready. Starting...%s\n", cli.Green, cli.Reset)  
+	fmt.Printf("%sSystem ready. Starting...%s\n", cli.Green, cli.Reset)
 	cli.Delay(1200)
 
 	cli.Run()
 }
 
 // Helper functions
-func printCheck(label string, ok bool, detail string) bool {  
-	symbol := fmt.Sprintf("%s✖%s", cli.Red, cli.Reset)  
+func printCheck(label string, ok bool, detail string) bool {
+	symbol := fmt.Sprintf("%s✖%s", cli.Red, cli.Reset)
 	status := cli.Red
+
 	if ok {
-		symbol = fmt.Sprintf("%s✔%s", cli.Green, cli.Reset)  
+		symbol = fmt.Sprintf("%s✔%s", cli.Green, cli.Reset)
 		status = cli.Green
 	}
 
-	fmt.Printf("%s %-24s %s%s%s\n", symbol, label, status, detail, cli.Reset)  
+	fmt.Printf("%s %-24s %s%s%s\n", symbol, label, status, detail, cli.Reset)
 	return ok
 }
 
@@ -68,13 +75,12 @@ func checkJava() (bool, string) {
 		return false, "not found in PATH"
 	}
 
-	cmd := exec.Command(javaPath, "-version")
-	output, err := cmd.CombinedOutput()
+	output, err := runCommandOutput(javaPath, "-version")
 	if err != nil {
 		return false, "found at " + javaPath + ", but failed to run"
 	}
 
-	version, ok := parseJavaVersion(string(output))
+	version, ok := parseJavaVersion(output)
 	if !ok {
 		return true, "detected at " + javaPath + " (version could not be parsed)"
 	}
@@ -86,32 +92,80 @@ func checkJava() (bool, string) {
 	return true, "version " + strconv.Itoa(version) + " detected at " + javaPath
 }
 
+func checkGo() (bool, string) {
+	goPath, err := exec.LookPath("go")
+	if err != nil {
+		return false, "not found in PATH"
+	}
+
+	output, err := runCommandOutput(goPath, "version")
+	if err != nil {
+		return false, "found at " + goPath + ", but failed to run"
+	}
+
+	version, ok := parseGoVersion(output)
+	if !ok {
+		return true, "detected at " + goPath + " (version could not be parsed)"
+	}
+
+	return true, "version " + version + " detected at " + goPath
+}
+
 func checkApktool() (bool, string) {
 	apktoolPath, err := exec.LookPath("apktool")
 	if err != nil {
 		return false, "not found in PATH"
 	}
 
-	// Run through shell like the terminal does
-	cmd := exec.Command("sh", "-c", "apktool -version")
-	output, _ := cmd.CombinedOutput()
+	for _, flag := range []string{"-version", "--version"} {
+		output, _ := runShellCommand("apktool " + flag)
+		output = strings.TrimSpace(output)
 
-	version := strings.TrimSpace(string(output))
+		if output == "" {
+			continue
+		}
 
-	// Fallback: some versions use --version
-	if version == "" {
-		cmd = exec.Command("sh", "-c", "apktool --version")
-		output, _ = cmd.CombinedOutput()
-		version = strings.TrimSpace(string(output))
+		if version, ok := parseApktoolVersion(output); ok {
+			return true, "version " + version + " detected at " + apktoolPath
+		}
+
+		// Fallback: if apktool printed something useful, show it rather than hiding it.
+		return true, "version " + output + " detected at " + apktoolPath
 	}
 
-	// If we got any output at all, treat it as success
-	if version != "" {
-		return true, "version " + version + " detected at " + apktoolPath
-	}
-
-	// Last fallback: executable exists, but version failed
 	return true, "detected at " + apktoolPath + " (version unavailable)"
+}
+
+func runShellCommand(command string) (string, error) {
+	var cmd *exec.Cmd
+
+	if runtime.GOOS == "windows" {
+		cmd = exec.Command("cmd", "/C", command)
+	} else {
+		cmd = exec.Command("sh", "-c", command)
+	}
+
+	output, err := cmd.CombinedOutput()
+	return strings.TrimSpace(string(output)), err
+}
+
+func runCommandOutput(command string, args ...string) (string, error) {
+	cmd := buildCommand(command, args...)
+	output, err := cmd.CombinedOutput()
+	return strings.TrimSpace(string(output)), err
+}
+
+func buildCommand(command string, args ...string) *exec.Cmd {
+	// On Windows, .bat/.cmd files need cmd /C.
+	if runtime.GOOS == "windows" {
+		ext := strings.ToLower(filepath.Ext(command))
+		if ext == ".bat" || ext == ".cmd" {
+			return exec.Command("cmd", append([]string{"/C", command}, args...)...)
+		}
+	}
+
+	// On Linux / Unix / Termux / WSL etc, run the command directly.
+	return exec.Command(command, args...)
 }
 
 func parseJavaVersion(output string) (int, bool) {
@@ -143,4 +197,23 @@ func parseJavaVersion(output string) (int, bool) {
 		return 0, false
 	}
 	return n, true
+}
+
+func parseGoVersion(output string) (string, bool) {
+	// Example: go version go1.22.4 windows/amd64
+	re := regexp.MustCompile(`go version go([^\s]+)`)
+	match := re.FindStringSubmatch(output)
+	if len(match) < 2 {
+		return "", false
+	}
+	return match[1], true
+}
+
+func parseApktoolVersion(output string) (string, bool) {
+	re := regexp.MustCompile(`\b(\d+\.\d+(?:\.\d+)*)\b`)
+	match := re.FindStringSubmatch(output)
+	if len(match) < 2 {
+		return "", false
+	}
+	return match[1], true
 }

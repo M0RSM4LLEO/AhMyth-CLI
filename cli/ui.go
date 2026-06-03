@@ -31,6 +31,7 @@ const (
 var (
 	ansiRegex = regexp.MustCompile(`\x1b\[[0-9;]*m`)
 
+	stopOnce      sync.Once
 	resizeMu      sync.Mutex
 	currentRedraw func()
 	lastWidth     int
@@ -104,26 +105,31 @@ func StartResizeListener() {
 // handleResize checks if size changed and triggers redraw
 func handleResize() {
 	resizeMu.Lock()
-	defer resizeMu.Unlock()
 
 	currentW := GetWidth()
 	currentH := GetHeight()
 
-	if currentW != lastWidth || currentH != lastHeight {
+	changed := currentW != lastWidth || currentH != lastHeight
+	if changed {
 		lastWidth = currentW
 		lastHeight = currentH
+	}
 
-		if currentRedraw != nil {
-			time.Sleep(30 * time.Millisecond) // let terminal settle
-			currentRedraw()
-		}
+	redraw := currentRedraw
+	resizeMu.Unlock()
+
+	if changed && redraw != nil {
+		time.Sleep(30 * time.Millisecond)
+		redraw()
 	}
 }
 
 // StopResizeListener cleans up (call on exit if needed)
 func StopResizeListener() {
-	close(pollDone)
-	signal.Stop(resizeChan)
+	stopOnce.Do(func() {
+		close(pollDone)
+		signal.Stop(resizeChan)
+	})
 }
 
 func VisibleLength(s string) int {
