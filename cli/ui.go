@@ -3,12 +3,10 @@ package cli
 import (
 	"fmt"
 	"os"
-	"os/signal"
 	"regexp"
 	"runtime"
 	"strings"
 	"sync"
-	"syscall"
 	"time"
 
 	"golang.org/x/term"
@@ -31,19 +29,33 @@ const (
 var (
 	ansiRegex = regexp.MustCompile(`\x1b\[[0-9;]*m`)
 
-	stopOnce      sync.Once
 	resizeMu      sync.Mutex
 	currentRedraw func()
 	lastWidth     int
 	lastHeight    int
-	resizeChan    = make(chan os.Signal, 1)
 	pollDone      = make(chan struct{})
+	closeOnce     sync.Once
 )
 
 // PrintSeparator prints a full-width separator line
 func PrintSeparator() {
 	width := GetWidth()
-	fmt.Println(strings.Repeat("─", width))
+	if width < 1 {
+		width = 80
+	}
+
+	sep := "─"
+
+	// Optional fallback for legacy Windows consoles
+	if runtime.GOOS == "windows" {
+		if os.Getenv("WT_SESSION") == "" &&
+			os.Getenv("ANSICON") == "" &&
+			os.Getenv("ConEmuANSI") != "ON" {
+			sep = "-"
+		}
+	}
+
+	fmt.Println(strings.Repeat(sep, width))
 }
 
 // GetWidth returns current terminal width
@@ -71,38 +83,7 @@ func SetRedrawFunc(f func()) {
 	resizeMu.Unlock()
 }
 
-// StartResizeListener starts cross-platform resize detection
-func StartResizeListener() {
-	// Unix-like (Linux, macOS, Termux)
-	if runtime.GOOS != "windows" {
-		signal.Notify(resizeChan, syscall.SIGWINCH)
-		go func() {
-			for range resizeChan {
-				handleResize()
-			}
-		}()
-	}
-
-	// Polling fallback (works on Windows + extra safety)
-	go func() {
-		ticker := time.NewTicker(600 * time.Millisecond)
-		defer ticker.Stop()
-
-		lastWidth = GetWidth()
-		lastHeight = GetHeight()
-
-		for {
-			select {
-			case <-pollDone:
-				return
-			case <-ticker.C:
-				handleResize()
-			}
-		}
-	}()
-}
-
-// handleResize checks if size changed and triggers redraw
+// Shared resize handler
 func handleResize() {
 	resizeMu.Lock()
 
@@ -124,14 +105,6 @@ func handleResize() {
 	}
 }
 
-// StopResizeListener cleans up (call on exit if needed)
-func StopResizeListener() {
-	stopOnce.Do(func() {
-		close(pollDone)
-		signal.Stop(resizeChan)
-	})
-}
-
 func VisibleLength(s string) int {
 	return len(ansiRegex.ReplaceAllString(s, ""))
 }
@@ -142,9 +115,11 @@ func Center(text string) string {
 
 func CenterWithWidth(text string, width int) string {
 	visible := VisibleLength(text)
+
 	if visible >= width {
 		return text
 	}
+
 	padding := (width - visible) / 2
 	return strings.Repeat(" ", padding) + text
 }
@@ -168,6 +143,7 @@ func ShowCursor() {
 func PrintHeader(text string) {
 	visibleLen := VisibleLength(text)
 	line := strings.Repeat("─", visibleLen)
+
 	fmt.Println(text)
 	fmt.Println(line)
 }
