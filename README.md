@@ -1,11 +1,13 @@
 # <div align="center">AhMyth-CLI</div>
-A Command line interface version of the AhMyth Android RAT Project.
-
+A Command line version of the AhMyth Android RAT Project.
 &nbsp;
+
+#
 ## <div align="center">⚠️ WARNING ⚠️</div>
 NOT READY YET — DONT USE
-
 &nbsp;
+
+#
 ## <div align="center">Usage</div>
 1. Clone it:
 ```
@@ -21,9 +23,10 @@ cd AhMyth-CLI
 
 3. Run it:
 ```
-./ahmyth-cli
+go run .
 ```
 &nbsp;
+#
 
 ## <div align="center">Build</div>
 1. Clone it:
@@ -38,7 +41,14 @@ cd AhMyth-CLI
 ```
 &nbsp;
 
-3. Build it:
+3. Build and Install it:
 ```
-go build -o ahmyth-cli
+go install
 ```
+&nbsp;
+
+4. Run it
+```
+ahmyth-cli
+```
+
