@@ -3,6 +3,7 @@ package cli
 import (
 	"fmt"
 	"os"
+	"os/exec"
 	"regexp"
 	"runtime"
 	"strings"
@@ -112,21 +113,32 @@ func PrintSeparator() {
 	fmt.Println(strings.Repeat(sep, width))
 }
 
+func terminalSize() (int, int) {
+	fds := []int{
+		int(os.Stdin.Fd()),
+		int(os.Stdout.Fd()),
+		int(os.Stderr.Fd()),
+	}
+
+	for _, fd := range fds {
+		w, h, err := term.GetSize(fd)
+		if err == nil && w > 0 && h > 0 {
+			return w, h
+		}
+	}
+
+	return 80, 24
+}
+
 // GetWidth returns current terminal width.
 func GetWidth() int {
-	w, _, err := term.GetSize(int(os.Stdout.Fd()))
-	if err != nil || w < 40 {
-		return 80
-	}
+	w, _ := terminalSize()
 	return w
 }
 
 // GetHeight returns current terminal height.
 func GetHeight() int {
-	_, h, err := term.GetSize(int(os.Stdout.Fd()))
-	if err != nil || h < 10 {
-		return 24
-	}
+	_, h := terminalSize()
 	return h
 }
 
@@ -180,6 +192,11 @@ func CenterWithWidth(text string, width int) string {
 func ClearScreen() {
 	if useANSI {
 		fmt.Print(Clear, Home)
+		return
+	}
+
+	if runtime.GOOS == "windows" {
+		_ = exec.Command("cmd", "/C", "cls").Run()
 		return
 	}
 
