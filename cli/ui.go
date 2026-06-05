@@ -1,9 +1,9 @@
 package cli
 
 import (
+	"bufio"
 	"fmt"
 	"os"
-	"os/exec"
 	"regexp"
 	"runtime"
 	"strconv"
@@ -24,7 +24,7 @@ var (
 	pollDone      = make(chan struct{})
 	closeOnce     sync.Once
 
-	useANSI   = supportsANSI()
+	useANSI    = supportsANSI()
 	useUnicode = supportsUnicodeBoxDrawing()
 
 	Reset = ""
@@ -107,59 +107,7 @@ func supportsUnicodeBoxDrawing() bool {
 	return false
 }
 
-func looksLikeGitBash() bool {
-	if runtime.GOOS != "windows" {
-		return false
-	}
-
-	termEnv := strings.ToLower(os.Getenv("TERM"))
-	msystem := strings.ToLower(os.Getenv("MSYSTEM"))
-
-	return strings.Contains(termEnv, "mintty") ||
-		strings.Contains(termEnv, "msys") ||
-		strings.Contains(termEnv, "cygwin") ||
-		strings.Contains(termEnv, "xterm") ||
-		msystem != ""
-}
-
-func shellTerminalSize() (int, int, bool) {
-	// Returns rows cols.
-	cmd := exec.Command("sh", "-lc", "stty size < /dev/tty")
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		return 0, 0, false
-	}
-
-	fields := strings.Fields(strings.TrimSpace(string(out)))
-	if len(fields) < 2 {
-		return 0, 0, false
-	}
-
-	rows, err1 := strconv.Atoi(fields[0])
-	cols, err2 := strconv.Atoi(fields[1])
-	if err1 != nil || err2 != nil || rows <= 0 || cols <= 0 {
-		return 0, 0, false
-	}
-
-	return cols, rows, true
-}
-
-func envTerminalSize() (int, int, bool) {
-	cols, err1 := strconv.Atoi(strings.TrimSpace(os.Getenv("COLUMNS")))
-	lines, err2 := strconv.Atoi(strings.TrimSpace(os.Getenv("LINES")))
-	if err1 != nil || err2 != nil || cols <= 0 || lines <= 0 {
-		return 0, 0, false
-	}
-	return cols, lines, true
-}
-
 func terminalSize() (int, int) {
-	if runtime.GOOS == "windows" && looksLikeGitBash() {
-		if w, h, ok := shellTerminalSize(); ok {
-			return w, h
-		}
-	}
-
 	fds := []int{
 		int(os.Stdin.Fd()),
 		int(os.Stdout.Fd()),
@@ -174,8 +122,10 @@ func terminalSize() (int, int) {
 	}
 
 	if runtime.GOOS == "windows" {
-		if w, h, ok := envTerminalSize(); ok {
-			return w, h
+		cols, err1 := strconv.Atoi(strings.TrimSpace(os.Getenv("COLUMNS")))
+		lines, err2 := strconv.Atoi(strings.TrimSpace(os.Getenv("LINES")))
+		if err1 == nil && err2 == nil && cols > 0 && lines > 0 {
+			return cols, lines
 		}
 	}
 
@@ -254,9 +204,15 @@ func CenterWithWidth(text string, width int) string {
 	return strings.Repeat(" ", padding) + text
 }
 
+func RenderBuffered(render func(w *bufio.Writer)) {
+	w := bufio.NewWriterSize(os.Stdout, 8192)
+	render(w)
+	_ = w.Flush()
+}
+
 func ClearScreen() {
 	if useANSI {
-		fmt.Print(Clear, Home)
+		fmt.Print("\033[2J\033[3J\033[H")
 		return
 	}
 
@@ -290,8 +246,10 @@ func PrintHeader(text string) {
 		lineChar = "─"
 	}
 
-	fmt.Println(text)
-	fmt.Println(strings.Repeat(lineChar, visibleLen))
+	RenderBuffered(func(w *bufio.Writer) {
+		fmt.Fprintln(w, text)
+		fmt.Fprintln(w, strings.Repeat(lineChar, visibleLen))
+	})
 }
 
 func PrintCentered(text string) {
@@ -307,18 +265,21 @@ func PrintLogo() {
 		"/_/   \\_\\_| |_|_|  |_|\\__, |\\__|_| |_|",
 		"                       |___/           ",
 		"--------------------------------------",
-		"ANDROID  REMOTE  ADMINISTRATION  TOOL",
+		"ANDROID  REMOTE  ADMINISTRATION  TOOL ",
+		"           CLI  v1.0-beta.0           ",
 		"======================================",
 	}
 
-	if useANSI {
-		for _, line := range logo {
-			fmt.Println(Center(fmt.Sprintf("%s%s%s%s", Bold, Blue, line, Reset)))
+	RenderBuffered(func(w *bufio.Writer) {
+		if useANSI {
+			for _, line := range logo {
+				fmt.Fprintln(w, Center(fmt.Sprintf("%s%s%s%s", Bold, Blue, line, Reset)))
+			}
+			return
 		}
-		return
-	}
 
-	for _, line := range logo {
-		fmt.Println(Center(line))
-	}
+		for _, line := range logo {
+			fmt.Fprintln(w, Center(line))
+		}
+	})
 }

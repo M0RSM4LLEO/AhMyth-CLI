@@ -10,10 +10,7 @@ import (
 func Run() {
 	ShowSplash()
 
-	// Start resize listener
 	StartResizeListener()
-
-	// Register menu redraw
 	SetRedrawFunc(drawMenu)
 
 	menuLoop()
@@ -27,14 +24,12 @@ func waitForEnter(reader *bufio.Reader) {
 func drawMenu() {
 	ClearScreen()
 	HideCursor()
-	defer ShowCursor() // Note: defer works per call
+	defer ShowCursor()
 
 	PrintLogo()
 	fmt.Println()
 
-	menuTitle := "Main Menu"
-	fmt.Printf("%s%s%s%s\n", Bold, Blue, menuTitle, Reset)
-	fmt.Printf("%s%s%s\n", Blue, strings.Repeat("—", len(menuTitle)), Reset)
+	PrintHeader("Main Menu")
 	fmt.Println()
 
 	fmt.Println("1) Listener (TO BE DONE)")
@@ -58,9 +53,11 @@ func menuLoop() {
 			ClearScreen()
 			StopResizeListener()
 			return
+
 		case "1", "2":
 			fmt.Println("This feature is not implemented yet.")
 			waitForEnter(reader)
+
 		default:
 			fmt.Println("Invalid option!")
 			Delay(800)
