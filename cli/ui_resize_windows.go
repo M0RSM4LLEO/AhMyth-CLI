@@ -3,11 +3,9 @@
 
 package cli
 
-import (
-	"time"
-)
+import "time"
 
-// StartResizeListener starts Windows resize detection
+// StartResizeListener starts Windows resize detection.
 func StartResizeListener() {
 	go func() {
 		ticker := time.NewTicker(600 * time.Millisecond)
@@ -27,6 +25,7 @@ func StartResizeListener() {
 	}()
 }
 
+// StopResizeListener cleans up the listener.
 func StopResizeListener() {
 	closeOnce.Do(func() {
 		close(pollDone)

@@ -12,7 +12,7 @@ import (
 
 var resizeChan = make(chan os.Signal, 1)
 
-// StartResizeListener starts Unix resize detection
+// StartResizeListener starts Unix resize detection.
 func StartResizeListener() {
 	signal.Notify(resizeChan, syscall.SIGWINCH)
 
@@ -22,7 +22,6 @@ func StartResizeListener() {
 		}
 	}()
 
-	// polling fallback
 	go func() {
 		ticker := time.NewTicker(600 * time.Millisecond)
 		defer ticker.Stop()
@@ -41,6 +40,7 @@ func StartResizeListener() {
 	}()
 }
 
+// StopResizeListener cleans up the listeners.
 func StopResizeListener() {
 	closeOnce.Do(func() {
 		close(pollDone)
