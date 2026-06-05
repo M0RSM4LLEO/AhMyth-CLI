@@ -57,15 +57,24 @@ func main() {
 
 // Helper functions
 func printCheck(label string, ok bool, detail string) bool {
-	symbol := fmt.Sprintf("%s✖%s", cli.Red, cli.Reset)
-	status := cli.Red
+	symbolText := "ERR"
+	symbolColor := cli.Red
 
 	if ok {
-		symbol = fmt.Sprintf("%s✔%s", cli.Green, cli.Reset)
-		status = cli.Green
+		symbolText = "OK"
+		symbolColor = cli.Green
 	}
 
-	fmt.Printf("%s %-24s %s%s%s\n", symbol, label, status, detail, cli.Reset)
+	if cli.SupportsUnicodeGlyphs() {
+		symbolText = "✖"
+		symbolColor = cli.Red
+		if ok {
+			symbolText = "✔"
+			symbolColor = cli.Green
+		}
+	}
+
+	fmt.Printf("%s %-24s %s%s%s\n", symbolColor+symbolText+cli.Reset, label, cli.Green, detail, cli.Reset)
 	return ok
 }
 

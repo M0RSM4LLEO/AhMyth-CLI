@@ -6,6 +6,7 @@ import (
 	"os/exec"
 	"regexp"
 	"runtime"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -55,6 +56,14 @@ func init() {
 	}
 }
 
+func SupportsANSIOutput() bool {
+	return useANSI
+}
+
+func SupportsUnicodeGlyphs() bool {
+	return useUnicode
+}
+
 func supportsANSI() bool {
 	if runtime.GOOS != "windows" {
 		return true
@@ -98,22 +107,59 @@ func supportsUnicodeBoxDrawing() bool {
 	return false
 }
 
-// PrintSeparator prints a full-width separator line.
-func PrintSeparator() {
-	width := GetWidth()
-	if width < 1 {
-		width = 80
+func looksLikeGitBash() bool {
+	if runtime.GOOS != "windows" {
+		return false
 	}
 
-	sep := "-"
-	if useUnicode {
-		sep = "─"
+	termEnv := strings.ToLower(os.Getenv("TERM"))
+	msystem := strings.ToLower(os.Getenv("MSYSTEM"))
+
+	return strings.Contains(termEnv, "mintty") ||
+		strings.Contains(termEnv, "msys") ||
+		strings.Contains(termEnv, "cygwin") ||
+		strings.Contains(termEnv, "xterm") ||
+		msystem != ""
+}
+
+func shellTerminalSize() (int, int, bool) {
+	// Returns rows cols.
+	cmd := exec.Command("sh", "-lc", "stty size < /dev/tty")
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return 0, 0, false
 	}
 
-	fmt.Println(strings.Repeat(sep, width))
+	fields := strings.Fields(strings.TrimSpace(string(out)))
+	if len(fields) < 2 {
+		return 0, 0, false
+	}
+
+	rows, err1 := strconv.Atoi(fields[0])
+	cols, err2 := strconv.Atoi(fields[1])
+	if err1 != nil || err2 != nil || rows <= 0 || cols <= 0 {
+		return 0, 0, false
+	}
+
+	return cols, rows, true
+}
+
+func envTerminalSize() (int, int, bool) {
+	cols, err1 := strconv.Atoi(strings.TrimSpace(os.Getenv("COLUMNS")))
+	lines, err2 := strconv.Atoi(strings.TrimSpace(os.Getenv("LINES")))
+	if err1 != nil || err2 != nil || cols <= 0 || lines <= 0 {
+		return 0, 0, false
+	}
+	return cols, lines, true
 }
 
 func terminalSize() (int, int) {
+	if runtime.GOOS == "windows" && looksLikeGitBash() {
+		if w, h, ok := shellTerminalSize(); ok {
+			return w, h
+		}
+	}
+
 	fds := []int{
 		int(os.Stdin.Fd()),
 		int(os.Stdout.Fd()),
@@ -127,7 +173,28 @@ func terminalSize() (int, int) {
 		}
 	}
 
+	if runtime.GOOS == "windows" {
+		if w, h, ok := envTerminalSize(); ok {
+			return w, h
+		}
+	}
+
 	return 80, 24
+}
+
+// PrintSeparator prints a full-width separator line.
+func PrintSeparator() {
+	width := GetWidth()
+	if width < 1 {
+		width = 80
+	}
+
+	sep := "-"
+	if useUnicode {
+		sep = "─"
+	}
+
+	fmt.Println(strings.Repeat(sep, width))
 }
 
 // GetWidth returns current terminal width.
@@ -153,9 +220,7 @@ func SetRedrawFunc(f func()) {
 func handleResize() {
 	resizeMu.Lock()
 
-	currentW := GetWidth()
-	currentH := GetHeight()
-
+	currentW, currentH := terminalSize()
 	changed := currentW != lastWidth || currentH != lastHeight
 	if changed {
 		lastWidth = currentW
@@ -192,11 +257,6 @@ func CenterWithWidth(text string, width int) string {
 func ClearScreen() {
 	if useANSI {
 		fmt.Print(Clear, Home)
-		return
-	}
-
-	if runtime.GOOS == "windows" {
-		_ = exec.Command("cmd", "/C", "cls").Run()
 		return
 	}
 
@@ -239,25 +299,6 @@ func PrintCentered(text string) {
 }
 
 func PrintLogo() {
-	if useANSI && useUnicode {
-		logo := []string{
-			"    _    _     __  __       _   _     ",
-			"   / \\  | |__ |  \\/  |_   _| |_| |__  ",
-			"  / _ \\ | '_ \\| |\\/| | | | | __| '_ \\ ",
-			" / ___ \\| | | | |  | | |_| | |_| | | |",
-			"/_/   \\_\\_| |_|_|  |_|\\__, |\\__|_| |_|",
-			"                       |___/           ",
-			"--------------------------------------",
-			"ANDROID  REMOTE  ADMINISTRATION  TOOL",
-			"======================================",
-		}
-
-		for _, line := range logo {
-			fmt.Println(Center(fmt.Sprintf("%s%s%s%s", Bold, Blue, line, Reset)))
-		}
-		return
-	}
-
 	logo := []string{
 		"    _    _     __  __       _   _     ",
 		"   / \\  | |__ |  \\/  |_   _| |_| |__  ",
@@ -268,6 +309,13 @@ func PrintLogo() {
 		"--------------------------------------",
 		"ANDROID  REMOTE  ADMINISTRATION  TOOL",
 		"======================================",
+	}
+
+	if useANSI {
+		for _, line := range logo {
+			fmt.Println(Center(fmt.Sprintf("%s%s%s%s", Bold, Blue, line, Reset)))
+		}
+		return
 	}
 
 	for _, line := range logo {
