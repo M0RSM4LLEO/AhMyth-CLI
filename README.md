@@ -1,5 +1,5 @@
-# <div align="center">AhMyth-CLI</div>
-A Command line version of the AhMyth Android RAT Project.
+# <div align="center">AhMyth-TUI</div>
+A Terminal User Interface version of the AhMyth Android RAT Project.
 &nbsp;
 
 #
